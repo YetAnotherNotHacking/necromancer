@@ -60,8 +60,27 @@ class storage_manager:
 
     class crud_operation:
         class create:
+            # insert a new file into the tracking database
+            # usage:
+            # required
+            # - path: path to the ledgerdb
+            # - file_path: file path of the file you are adding
+            # - file_hash: new hash of the file
+            # - size: size in bytes of the file you are adding
+            # - mtime: modified time of the file
+            # - world_id: world id file belongs to. will work without, though that is very not advised
+            # optional
+            # - version: increment +1 each time file is updated (not handled here, just set to one)
+            # - deleted: if file is deleted set this to 1, program wont handle this but it's useful data
+            # - last_synced: last time file was synced to LOCAL CACHE!!!! that is delivered to subscribed servers
             def add_file_to_ledger():
-                pass
+                conn = sqlite3.connect(path, file_path, file_hash, size, mtime, version=1, deleted=0, last_synced=None, world_id=None)
+                conn.execute('''
+                    INSERT INTO files (path, hash, size, mtime, version, deleted, last_synced, world_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (file_path, file_hash, size, mtime, version, deleted, last_synced, world_id))
+                conn.commit()
+                conn.close
 
             def add_tracked_world(path, name, root_path, last_scan=None):
                 # add a world file into the world tracker db for the program to begin tracking it
@@ -77,10 +96,12 @@ class storage_manager:
 
 
         class read:
-            def read_ledger_paginated():
-                pass
-            def read_all_entries():
-                pass
+            # read files from ledger, is incremental to prevent huge data transfers at once.
+            def read_ledger_paginated(path, offset=0 limit=100):
+                conn = sqlite3.connect(path)
+                rows = conn.execute('SELECT * FROM files LIMIT ? OFFSET ?', (limit, offset)).fetchall()
+                conn.close()
+                return rows
             # read world entires from db, only path should be used 
             def read_world_entries(path, offset=0, limit=100):
                 conn = sqlite3.connect(path)
@@ -89,8 +110,22 @@ class storage_manager:
                 return rows
             
         class update:
-            def modify_ledger_record():
-                pass
+            # function to modify file entires in the db:
+            # usage:
+            # - path: path of ledger db
+            # - file_id: id of file you are modifying the properties for
+            # - other args: arguments are processed wildcard, all arguments provided will be interpreted
+            # and added to the database
+            def modify_ledger_record(path, file_id, **kwargs):
+                conn = sqlite3.connect(path)
+                fields, values = [], []
+                for key, val in kwargs.items():
+                    fields.append(f"{key}=?")
+                    values.append(val)
+                values.append(file_id)
+                conn.execute(f'UPDATE files SET {", ".join(fields)} WHERE id=?', values)
+                conn.commit()
+                conn.close()
 
             # update world entries (mostly used to update last_scsan and the world path)
             # usage:
@@ -120,7 +155,11 @@ class storage_manager:
 
         class delete:
             def remove_ledger_record():
-                pass
+                conn = sqlite3.connect(path)
+                conn.execute('DELETE FROM files WHERE id=?', (file_id,))
+                conn.commit()
+                conn.close()
+
             def delete_world():
                 conn = sqlite3.connect(path)
                 conn.execute('DELETE FROM worlds WHERE id=?', (world_id,))
