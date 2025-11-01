@@ -57,7 +57,3 @@ class storage_manager:
             ''')
             conn.commit()
             conn.close()
-
-
-hash = storage_manager.verify_file_hash("/home/dread/necromancer/test.txt")
-print(hash)
