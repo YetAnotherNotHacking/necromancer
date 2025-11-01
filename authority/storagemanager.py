@@ -57,3 +57,72 @@ class storage_manager:
             ''')
             conn.commit()
             conn.close()
+
+    class crud_operation:
+        class create:
+            def add_file_to_ledger():
+                pass
+
+            def add_tracked_world(path, name, root_path, last_scan=None):
+                # add a world file into the world tracker db for the program to begin tracking it
+                # usage:
+                # - path: path of the world tracking database
+                # - name: name of the world entry e.g. world, world_nether, world_the_end or even world_backup or similar
+                # - root_path: the root path of the world file e.g. for amc /home/luna/anarchymc/world or something
+                # - last_scan: dont change this, used for the program to know when rescans of the local files are needed.
+                conn = sqlite3.connect(path)
+                conn.execute('INSERT INTO worlds (name, root_path, last_scan) VALUES (?, ?, ?)', (name, root_path, last_scan))
+                conn.commit()
+                conn.close()
+
+
+        class read:
+            def read_ledger_paginated():
+                pass
+            def read_all_entries():
+                pass
+            # read world entires from db, only path should be used 
+            def read_world_entries(path, offset=0, limit=100):
+                conn = sqlite3.connect(path)
+                rows = conn.execute('SELECT * FROM worlds LIMIT ? OFFSET ?', (limit, offset)).fetchall()
+                conn.close()
+                return rows
+            
+        class update:
+            def modify_ledger_record():
+                pass
+
+            # update world entries (mostly used to update last_scsan and the world path)
+            # usage:
+            # required:
+            # - path: path to the worlds database that you are updating
+            # - world_id: the id of the world in the database that you are updating
+            # optional (atleast one):
+            # - name: new name value to update the name in the database
+            # - root_path: new root path to update the path in the db
+            # - last_scan: update the last_scan entry in the database
+            def update_world_entry(path, world_id, name=None, root_path=None, last_scan=None):
+                conn = sqlite3.connect(path)
+                fields, values = [], []
+                if name is not None:
+                    fields.append("name=?")
+                    values.append(name)
+                if root_path is not None:
+                    fields.append("root_path=?")
+                    values.append(root_path)
+                if last_scan is not None:
+                    fields.append("last_scan=?")
+                    values.append(last_scan)
+                values.append(world_id)
+                conn.execute(f'UPDATE worlds SET {", ".join(fields)} WHERE id=?', values)
+                conn.commit()
+                conn.close()
+
+        class delete:
+            def remove_ledger_record():
+                pass
+            def delete_world():
+                conn = sqlite3.connect(path)
+                conn.execute('DELETE FROM worlds WHERE id=?', (world_id,))
+                conn.commit()
+                conn.close()
