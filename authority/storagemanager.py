@@ -1,47 +1,68 @@
+# Necromancer utility
+# Sync minecraft servers over the internet to prevent outages
+
 version = "0.1.0"
+company = "Silverflag"
 systemname = "Necromancer"
-print(f"{systemname} {version}")
+debug = True
+
+print(f"{company} {systemname} v{version}")
 # Manages the server's hash manifest database, a ledger of the files on the server with xxhash values to
 # compare values with the client to indicate updated files.
 
 try:
     from colorama import Fore, Style, init
     from datetime import datetime
+    from platformdirs import PlatformDirs
     import sqlite3
+    import argparse
+    import tempdir
+    import os
+    import json
+    from pathlib import Path
 except Exception as e:
     print(f"Dependancies are not met. Install them.\nSpecfic error:\n{e}")
+    exit()
 
+default_world_db = "worlds.db"
+default_ledger_db = "fileledger.db"
+cfgdirs = PlatformDirs(systemname, company)
+config_path = cfgdirs.user_config_dir
+config_location = f"{config_path}/systemconfig.json"
 
-class log:
+class logfw:
     class Logger:
-    LEVELS = {
-        'INFO': Fore.CYAN,
-        'WARN': Fore.YELLOW,
-        'ERROR': Fore.RED,
-        'SUCCESS': Fore.GREEN,
-        'DEBUG': Fore.MAGENTA
-    }
+        LEVELS = {
+            'INFO': Fore.CYAN,
+            'WARN': Fore.YELLOW,
+            'ERROR': Fore.RED,
+            'SUCCESS': Fore.GREEN,
+            'DEBUG': Fore.MAGENTA
+        }
 
-    def __init__(self, name=None):
-        self.name = name or 'LOG'
+        def __init__(self, name=None):
+            self.name = name or 'LOG'
 
-    def _log(self, level, msg):
-        color = self.LEVELS.get(level, Fore.WHITE)
-        timestamp = datetime.now().strftime('%H:%M:%S')
-        print(f"{Style.BRIGHT}{Fore.WHITE}[{timestamp}] {color}[{level:<7}] {Fore.WHITE}{self.name}: {msg}")
+        def _log(self, level, msg):
+            color = self.LEVELS.get(level, Fore.WHITE)
+            timestamp = datetime.now().strftime('%H:%M:%S')
+            print(f"{Style.BRIGHT}{Fore.WHITE}[{timestamp}] {color}[{level:<7}] {Fore.WHITE}{self.name}: {msg}")
 
-    def info(self, msg):
-        self._log('INFO', msg)
-    def warn(self, msg):
-        self._log('WARN', msg)
-    def error(self, msg):
-        self._log('ERORR', msg)
-    def succes(self, msg):
-        self._log('SUCCESS', msg)
-    def debug(self, msg):
-        self._log('DEBUG', msg)
+        def info(self, msg):
+            self._log('INFO', msg)
+        def warn(self, msg):
+            self._log('WARN', msg)
+        def error(self, msg):
+            self._log('ERORR', msg)
+        def success(self, msg):
+            self._log('SUCCESS', msg)
+        def debug(self, msg):
+            if debug == True:
+                self._log('DEBUG', msg)
+            else:
+                pass
 
-log = Logger(systemname)
+log = logfw.Logger(systemname)
 log.info("Hello from StorageManager")
 
 class storage_manager:
@@ -65,7 +86,7 @@ class storage_manager:
         # file tracker: the main database for tracking all file changes on the server side world,
         # this will be compressed in some way for transit to clients, constantly rechecked and
         # regenerated. It will probably be sent every 10 minutes, or more depending on load.
-        def init_filetrack_ledger(path="filetrack.db"):
+        def init_filetrack_ledger(path=default_ledger_db):
             log.info("Initing file tracking database...")
             conn = sqlite3.connect(path)
             conn.execute('''
@@ -85,7 +106,7 @@ class storage_manager:
             conn.close()
             log.success(f"DB {path} init complete")
 
-        def init_world_database(path="worlds.db"):
+        def init_world_database(path=default_world_db):
             log.info(f"Initing world tracking database...")
             conn = sqlite3.connect(path)
             conn.execute('''
@@ -210,3 +231,110 @@ class storage_manager:
                 conn.commit()
                 conn.close()
                 log.success(f"Deleted world {world_id}")
+    
+    class config_manager:
+        def write_config(configpath, host, port, serverroot, ledgerdblocation, worlddblocation, scaninterval, debugmode):
+            data = {
+                "host": host,
+                "port": port,
+                "serverroot": str(serverroot),
+                "ledgerdblocation": str(ledgerdblocation),
+                "worlddblocation": str(worlddblocation),
+                "scaninterval": scaninterval,
+                "debugmode": debugmode
+            }
+            configpath = Path(configpath)
+            configpath.parent.mkdir(parents=True, exist_ok=True)
+            with configpath.open("w") as f:
+                json.dump(data, f, indent=4)
+            log.info(f"Wrote config to {configpath}")
+        
+        def read_config(configpath):
+            configpath = Path(configpath)
+            with configpath.open() as f:
+                data = json.load(f)
+            return [
+                data["host"],
+                data["port"],
+                data["serverroot"],
+                data["ledgerdblocation"],
+                data["worlddblocation"],
+                data["scaninterval"],
+                data["debugmode"]
+            ]
+class interface:
+    def confirmation_dialogue(question, default=True):
+        if default == True:
+            defanswer = "[Y/n]"
+        else:
+            defanswer = "[y/N]"
+        userinput = input(f"{question} - {defanswer}")
+        if (userinput.lower() == "y") or (userinput == "" and default == True):
+            # log.debug(f"Answer to \'{question}\' was True.")
+            return True
+        else:
+            # log.debug(f"Answer to \'{question}\' was False.")
+            return False
+
+    def init_config_request():
+        configconfigpath = config_path
+        confighost = input("Host (ip): ")
+        configport = int(input("Port: "))
+        configserverroot = input("Root server location: ")
+        configledgerdblocation = input("Ledger DB file path (ends in /ledger.db): ")
+        configworlddblocation = input("World DB file path (ends in /world.db): ")
+        configscaninterval = int(input("Scan interval (s) (rec: 600): "))
+        configdebugmode = input("Debug mode (true/false): ").lower() == "true"
+        storage_manager.config_manager.write_config(configconfigpath, confighost, configport, configserverroot, configledgerdblocation, configworlddblocation, configscaninterval, configdebugmode)
+
+
+    def ifbackend(mode):
+        modes = ["run", "init", "reset", "syncall", "info"]
+        log.debug(f"Interface backend running in mode {mode}")
+        
+        if mode not in modes:
+            log.error(f"Mode \'{mode}\' is not supported, supported options are {modes}")
+
+        match mode:
+            case "run":
+                pass
+            case "init":
+                storage_manager.init_database.init_filetrack_ledger()
+                storage_manager.init_database.init_world_database()
+                log.info(f"System config path: {config_location}")
+                if not os.path.exists(config_location):
+                    log.warn(f"Config does NOT exist. You will be prompted to make one.")
+                    makenewconfig = interface.confirmation_dialogue("No config file found, make one now?", default=True)
+                    if makenewconfig:
+                        log.info("Generating config, info must be filled out.")
+                        interface.init_config_request()
+                    else:
+                        log.info("Skipping config generation.")
+                else:
+                    log.info("Found existing config.")
+                    makenewconfig = interface.confirmation_dialogue("Found an existing config, make a new one?", default=False)
+                    if makenewconfig:
+                        log.info("Regenerating config, info must be filled out.")
+                        interface.init_config_request()
+                    else:
+                        log.info("Skipping config regeneration.")
+
+            case "reset":
+                pass
+            case "syncall":
+                pass
+            case "info":
+                pass
+
+    def local_argument_parser():
+        parser = argparse.ArgumentParser(description=systemname)
+
+        parser.add_argument("runmode", help="Mode to run progam in, options: run, init, reset, syncall, info")
+
+        inputargs = parser.parse_args()
+
+        if inputargs.runmode:
+            interface.ifbackend(inputargs.runmode)
+
+if __name__ == "__main__":
+    interface.local_argument_parser()
