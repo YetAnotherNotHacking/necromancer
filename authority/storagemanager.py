@@ -19,16 +19,18 @@ try:
     import tempdir
     import os
     import json
+    import concurrent.futures
     from pathlib import Path
 except Exception as e:
     print(f"Dependancies are not met. Install them.\nSpecfic error:\n{e}")
     exit()
 
-default_world_db = "worlds.db"
-default_ledger_db = "fileledger.db"
 cfgdirs = PlatformDirs(systemname, company)
 config_path = cfgdirs.user_config_dir
-config_location = f"{config_path}/systemconfig.json"
+config_location = f"{config_path}/cfg.json" # FIX: make real json file, accidentally used wrong var in a few places.
+# to fix, config_path needs to be config_location.
+default_world_db = f"{config_path}/worlds.db"
+default_ledger_db = f"{config_path}/fileledger.db"
 
 class logfw:
     class Logger:
@@ -65,7 +67,50 @@ class logfw:
 log = logfw.Logger(systemname)
 log.info("Hello from StorageManager")
 
+def write_config(configpath, host, port, serverroot, ledgerdblocation, worlddblocation, scaninterval, debugmode):
+    data = {
+        "host": host,
+        "port": port,
+        "serverroot": str(serverroot),
+        "ledgerdblocation": str(ledgerdblocation),
+        "worlddblocation": str(worlddblocation),
+        "scaninterval": scaninterval,
+        "debugmode": debugmode
+    }
+    configpath = Path(configpath)
+    configpath.parent.mkdir(parents=True, exist_ok=True)
+    if configpath == "" or None:
+        log.error("Config path is null when attempting to write config.")
+        exit()
+    with configpath.open("w") as f:
+        json.dump(data, f, indent=4)
+    log.info(f"Wrote config to {configpath}")
+
+def read_config(configpath):
+    configpath = Path(configpath)
+    with configpath.open() as f:
+        data = json.load(f)
+    return [
+        data["host"],
+        data["port"],
+        data["serverroot"],
+        data["ledgerdblocation"],
+        data["worlddblocation"],
+        data["scaninterval"],
+        data["debugmode"]
+    ]
+
+
 class storage_manager:
+    class config_manager:
+        def write_config(configpath, host, port, serverroot, ledgerdblocation, worlddblocation, scaninterval, debugmode):
+            return write_config(configpath, host, port, serverroot, ledgerdblocation, worlddblocation, scaninterval, debugmode)
+
+        def read_config(configpath):
+            return read_config(configpath)
+
+
+
     # verify file hash is used to both generate and verify file hashes of the region files (and other)
     # it will be implemented this same way on the client to allow for file comparison.
     def verify_file_hash(path, chunk_size=4<<20):
@@ -87,7 +132,9 @@ class storage_manager:
         # this will be compressed in some way for transit to clients, constantly rechecked and
         # regenerated. It will probably be sent every 10 minutes, or more depending on load.
         def init_filetrack_ledger(path=default_ledger_db):
+            log.info(f"Ledger db path is at {path}")
             log.info("Initing file tracking database...")
+            os.makedirs(os.path.dirname(path), exist_ok=True)
             conn = sqlite3.connect(path)
             conn.execute('''
             CREATE TABLE IF NOT EXISTS files (
@@ -107,7 +154,9 @@ class storage_manager:
             log.success(f"DB {path} init complete")
 
         def init_world_database(path=default_world_db):
+            log.info(f"World db path is at {path}")
             log.info(f"Initing world tracking database...")
+            os.makedirs(os.path.dirname(path), exist_ok=True)
             conn = sqlite3.connect(path)
             conn.execute('''
             CREATE TABLE IF NOT EXISTS worlds (
@@ -137,7 +186,9 @@ class storage_manager:
             # - deleted: if file is deleted set this to 1, program wont handle this but it's useful data
             # - last_synced: last time file was synced to LOCAL CACHE!!!! that is delivered to subscribed servers
             def add_file_to_ledger(path, file_path, file_hash, size, mtime, version=1, deleted=0, last_synced=None, world_id=None):
-                conn = sqlite3.connect()
+                log.debug(f"Writing new file to ledger database at {path}")
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                conn = sqlite3.connect(path)
                 conn.execute('''
                     INSERT INTO files (path, hash, size, mtime, version, deleted, last_synced, world_id)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -152,6 +203,7 @@ class storage_manager:
                 # - name: name of the world entry e.g. world, world_nether, world_the_end or even world_backup or similar
                 # - root_path: the root path of the world file e.g. for amc /home/luna/anarchymc/world or something
                 # - last_scan: dont change this, used for the program to know when rescans of the local files are needed.
+                os.makedirs(os.path.dirname(path), exist_ok=True)
                 conn = sqlite3.connect(path)
                 conn.execute('INSERT INTO worlds (name, root_path, last_scan) VALUES (?, ?, ?)', (name, root_path, last_scan))
                 conn.commit()
@@ -162,12 +214,14 @@ class storage_manager:
         class read:
             # read files from ledger, is incremental to prevent huge data transfers at once.
             def read_ledger_paginated(path, offset=0, limit=100):
+                os.makedirs(os.path.dirname(path), exist_ok=True)
                 conn = sqlite3.connect(path)
                 rows = conn.execute('SELECT * FROM files LIMIT ? OFFSET ?', (limit, offset)).fetchall()
                 conn.close()
                 return rows
             # read world entires from db, only path should be used
             def read_world_entries(path, offset=0, limit=100):
+                os.makedirs(os.path.dirname(path), exist_ok=True)
                 conn = sqlite3.connect(path)
                 rows = conn.execute('SELECT * FROM worlds LIMIT ? OFFSET ?', (limit, offset)).fetchall()
                 conn.close()
@@ -181,6 +235,7 @@ class storage_manager:
             # - other args: arguments are processed wildcard, all arguments provided will be interpreted
             # and added to the database
             def modify_ledger_record(path, file_id, **kwargs):
+                os.makedirs(os.path.dirname(path), exist_ok=True)
                 conn = sqlite3.connect(path)
                 fields, values = [], []
                 for key, val in kwargs.items():
@@ -201,6 +256,7 @@ class storage_manager:
             # - root_path: new root path to update the path in the db
             # - last_scan: update the last_scan entry in the database
             def update_world_entry(path, world_id, name=None, root_path=None, last_scan=None):
+                os.makedirs(os.path.dirname(path), exist_ok=True)
                 conn = sqlite3.connect(path)
                 fields, values = [], []
                 if name is not None:
@@ -220,48 +276,57 @@ class storage_manager:
 
         class delete:
             def remove_ledger_record(path, file_id):
+                os.makedirs(os.path.dirname(path), exist_ok=True)
                 conn = sqlite3.connect(path)
                 conn.execute('DELETE FROM files WHERE id=?', (file_id,))
                 conn.commit()
                 conn.close()
 
             def delete_world(path, world_id):
+                os.makedirs(os.path.dirname(path), exist_ok=True)
                 conn = sqlite3.connect(path)
                 conn.execute('DELETE FROM worlds WHERE id=?', (world_id,))
                 conn.commit()
                 conn.close()
                 log.success(f"Deleted world {world_id}")
     
-    class config_manager:
-        def write_config(configpath, host, port, serverroot, ledgerdblocation, worlddblocation, scaninterval, debugmode):
-            data = {
-                "host": host,
-                "port": port,
-                "serverroot": str(serverroot),
-                "ledgerdblocation": str(ledgerdblocation),
-                "worlddblocation": str(worlddblocation),
-                "scaninterval": scaninterval,
-                "debugmode": debugmode
-            }
-            configpath = Path(configpath)
-            configpath.parent.mkdir(parents=True, exist_ok=True)
-            with configpath.open("w") as f:
-                json.dump(data, f, indent=4)
-            log.info(f"Wrote config to {configpath}")
-        
-        def read_config(configpath):
-            configpath = Path(configpath)
-            with configpath.open() as f:
-                data = json.load(f)
-            return [
-                data["host"],
-                data["port"],
-                data["serverroot"],
-                data["ledgerdblocation"],
-                data["worlddblocation"],
-                data["scaninterval"],
-                data["debugmode"]
-            ]
+    class file_status_mng:
+        # checks if db is empty, and fills db with hashes of files for first time init.
+        def populate_db_with_file_hashes(root_path, threads, ledgerdblocation):
+            def process_file(file_path):
+                file_hash = storage_manager.verify_file_hash(file_path)
+                size = os.path.getsize(file_path)
+                mtime = int(os.path.getmtime(file_path))
+                storage_manager.crud_operation.create.add_file_to_ledger(
+                    ledgerdblocation, file_path, file_hash, size, mtime
+                )
+            try:
+                # os.makedirs(os.path.dirname(path), exist_ok=True)
+                conn = sqlite3.connect(ledgerdblocation)
+                cur = conn.cursor()
+                cur.execute("SELECT COUNT(*) FROM files")
+                if cur.fetchone()[0] > 0:
+                    conn.close()
+                    log.error("Denied. You may not populate db when db already has entries. Re-init and try again.")
+                    return
+                conn.close()
+            except sqlite3.OperationalError:
+                log.warn("Failed to insert files into db, will reinit. You will need to syncall again.")
+                storage_manager.init_database.init_filetrack_ledger()
+                log.info("Performed init. Please run syncall again.")
+
+            files = []
+            for root, _, filenames in os.walk(root_path):
+                for name in filenames:
+                    files.append(os.path.join(root, name))
+            log.info(f"Walked directories, discovered {len(files)} files")
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+                list(executor.map(process_file, files))
+
+        # check for changed file sizes and modification date updates and calculate the new hash
+        def update_db_hashes():
+            pass
 class interface:
     def confirmation_dialogue(question, default=True):
         if default == True:
@@ -277,16 +342,23 @@ class interface:
             return False
 
     def init_config_request():
-        configconfigpath = config_path
+        configconfigpath = config_location
         confighost = input("Host (ip): ")
         configport = int(input("Port: "))
         configserverroot = input("Root server location: ")
-        configledgerdblocation = input("Ledger DB file path (ends in /ledger.db): ")
-        configworlddblocation = input("World DB file path (ends in /world.db): ")
         configscaninterval = int(input("Scan interval (s) (rec: 600): "))
         configdebugmode = input("Debug mode (true/false): ").lower() == "true"
-        storage_manager.config_manager.write_config(configconfigpath, confighost, configport, configserverroot, configledgerdblocation, configworlddblocation, configscaninterval, configdebugmode)
 
+        storage_manager.config_manager.write_config(
+            configconfigpath,
+            confighost,
+            configport,
+            configserverroot,
+            default_ledger_db,
+            default_world_db,
+            configscaninterval,
+            configdebugmode
+        )
 
     def ifbackend(mode):
         modes = ["run", "init", "reset", "syncall", "info"]
@@ -318,11 +390,29 @@ class interface:
                         interface.init_config_request()
                     else:
                         log.info("Skipping config regeneration.")
+                if os.path.exists(config_location):
+                    askpopulatedb = interface.confirmation_dialogue("Populate DB from root path in config?", default=True)
+                    if askpopulatedb:
+                        host, port, serverroot, ledgerdblocation, worlddblocation, scaninterval, debugmode = storage_manager.config_manager.read_config(config_location)
+                        populationthreads = 12
+                        log.info(f"Populating db with {populationthreads} threads for path {serverroot}")
+                        storage_manager.file_status_mng.populate_db_with_file_hashes(serverroot, populationthreads, ledgerdblocation)
+                        log.info("OK, populating db.")
+                    else:
+                        log.info("You probably want to populate the db at some point.")
 
             case "reset":
                 pass
             case "syncall":
-                pass
+                askpopulatedb = interface.confirmation_dialogue("Populate DB from root path in config?", default=True)
+                if askpopulatedb:
+                    host, port, serverroot, ledgerdblocation, worlddblocation, scaninterval, debugmode = storage_manager.config_manager.read_config(config_location)
+                    populationthreads = 12
+                    log.info(f"Populating db with {populationthreads} threads for path {serverroot}")
+                    storage_manager.file_status_mng.populate_db_with_file_hashes(serverroot, populationthreads, ledgerdblocation)
+                    log.info("OK, populating db.")
+                else:
+                    log.info("You probably want to populate the db at some point.")
             case "info":
                 pass
 
