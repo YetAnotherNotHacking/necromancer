@@ -4,7 +4,7 @@
 version = "0.1.0"
 company = "Silverflag"
 systemname = "Necromancer"
-debug = True
+debug = False
 
 print(f"{company} {systemname} v{version}")
 # Manages the server's hash manifest database, a ledger of the files on the server with xxhash values to
@@ -116,7 +116,7 @@ class storage_manager:
     def verify_file_hash(path, chunk_size=4<<20):
         try:
             import xxhash
-            log.success("Hash check init succes")
+            log.debug("Hashing with xxhash")
             return xxhash.xxh64(open(path, 'rb').read()).hexdigest()
         except Exception:
             log.warn("Slow hashing is used, install python package \'xxhash\' to resolve this issue.")
@@ -307,8 +307,8 @@ class storage_manager:
                 cur.execute("SELECT COUNT(*) FROM files")
                 if cur.fetchone()[0] > 0:
                     conn.close()
-                    log.error("Denied. You may not populate db when db already has entries. Re-init and try again.")
-                    return
+                    log.warn("Denied. You may not populate db when db already has entries. Will assume you intended to update.")
+                    storage_manager.file_status_mng.update_db_hashes(root_path, ledgerdblocation)
                 conn.close()
             except sqlite3.OperationalError:
                 log.warn("Failed to insert files into db, will reinit. You will need to syncall again.")
@@ -325,8 +325,45 @@ class storage_manager:
                 list(executor.map(process_file, files))
 
         # check for changed file sizes and modification date updates and calculate the new hash
-        def update_db_hashes():
-            pass
+        def update_db_hashes(root_path, ledgerdblocation, threads=12):
+            def process_file(file_path):
+                size = os.path.getsize(file_path)
+                mtime = int(os.path.getmtime(file_path))
+                conn = sqlite3.connect(ledgerdblocation)
+                cur = conn.cursor()
+                cur.execute("SELECT id, size, mtime FROM files WHERE path=?", (file_path,))
+                row = cur.fetchone()
+                if row:
+                    fid, old_size, old_mtime = row
+                    if size != old_size or mtime != old_mtime:
+                        new_hash = storage_manager.verify_file_hash(file_path)
+                        cur.execute(
+                            "UPDATE files SET hash=?, size=?, mtime=?, version=version+1 WHERE id=?",
+                            (new_hash, size, mtime, fid),
+                        )
+                        conn.commit()
+                        log.debug(f"Updated {file_path}")
+                else:
+                    new_hash = storage_manager.verify_file_hash(file_path)
+                    storage_manager.crud_operation.create.add_file_to_ledger(
+                        ledgerdblocation, file_path, new_hash, size, mtime
+                    )
+                    log.debug(f"Added new file {file_path}")
+                conn.close()
+            
+            log.info(f"Updating hashes in db for the server")
+            files = []
+            for root, _, filenames in os.walk(root_path):
+                for name in filenames:
+                    files.append(os.path.join(root, name))
+            
+            log.info(f"Discovered {len(files)} files to check")
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
+                list(executor.map(process_file, files))
+
+            log.success("Finished updating hashes in db.")
+
 class interface:
     def confirmation_dialogue(question, default=True):
         if default == True:
