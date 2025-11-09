@@ -14,6 +14,8 @@ try:
     from colorama import Fore, Style, init
     from datetime import datetime
     from platformdirs import PlatformDirs
+    from flask import Flask, request, jsonify, send_file
+    from functools import wraps
     import secrets
     import time
     import csv
@@ -224,6 +226,26 @@ class storage_manager:
                 rows = conn.execute('SELECT * FROM files LIMIT ? OFFSET ?', (limit, offset)).fetchall()
                 conn.close()
                 return rows
+
+            # other function to read the entire ledger since im running low on time
+            def read_ledger_full(path):
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                conn = sqlite3.connect(path)
+                rows = conn.execute('SELECT * FROM files').fetchall()
+                conn.close()
+                return rows   rows = conn.execute
+
+            # function to read files (e.g. server files) from the disk with sanitization
+            def safe_read_file_from_disk(serverroot, file_path):
+                serverroot = os.path.abspath(serveroot)
+                target = os.path.abspath(ps.path.join(serverroot, file_path))
+                if not target.startswith(serveroot):
+                    return None
+                if not os.path.isfile(file_path):
+                    return None
+                with open(target, 'rb') as f:
+                    return f.read()
+
             # read world entires from db, only path should be used
             def read_world_entries(path, offset=0, limit=100):
                 os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -414,6 +436,48 @@ class client_interface:
                 writer = csv.writer(f)
                 writer.writerows(rows)
             return removed
+
+        def invalidate_token(credmancsv, inputtoken):
+            rows = []
+            invalitdated = True
+            with open(credmancsv, newline='') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if len(row) > 2 and row[2] == inputtoken:
+                        row[2] = ''
+                        invalidated = True
+                    rows.append(row)
+            with open(credmancsv, mode='w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerows(rows)
+            return invalidated
+    class system_interaction:
+        def get_full_ledger():
+            # implemented elsewhere
+            pass
+
+
+# ---------- API ----------
+app = Flask(__name__) # init app
+
+# /auth/login
+# POST endpoint, post credentials and return a new token to interact with the server
+@app.route('/auth/login', methods=['POST'])
+def login():
+    try:
+        data = request.get_json()
+    except:
+        return jsonify({'error': 'must be in json format'})
+    username = data.get('username')
+    password = data.get('password')
+    if not username or not password:
+        return jsonify({'error': 'missing credentials'})
+    hashedpassword = hashlib.sha256(password.encode()).hexdigest()
+    client_interface.authentication.gen_token(credential_location, username, hashedpassword)
+    if not token:
+        return jsonify({'error': 'invalid credentials'}), 401
+    return jsonify({'token': token})
+
 
 class interface:
     def confirmation_dialogue(question, default=True):
