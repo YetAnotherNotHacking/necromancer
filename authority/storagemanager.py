@@ -33,6 +33,7 @@ cfgdirs = PlatformDirs(systemname, company)
 config_path = cfgdirs.user_config_dir
 config_location = f"{config_path}/cfg.json" # FIX: make real json file, accidentally used wrong var in a few places.
 # to fix, config_path needs to be config_location.
+credential_location = f"{config_path}/cred.csv"
 default_world_db = f"{config_path}/worlds.db"
 default_ledger_db = f"{config_path}/fileledger.db"
 
@@ -490,7 +491,7 @@ class interface:
 
             case "reset":
                 pass
-                
+
             case "syncall":
                 askpopulatedb = interface.confirmation_dialogue("Populate DB from root path in config?", default=True)
                 if askpopulatedb:
