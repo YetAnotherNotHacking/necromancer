@@ -14,6 +14,10 @@ try:
     from colorama import Fore, Style, init
     from datetime import datetime
     from platformdirs import PlatformDirs
+    import secrets
+    import time
+    import csv
+    import hashlib
     import sqlite3
     import argparse
     import tempdir
@@ -364,6 +368,52 @@ class storage_manager:
 
             log.success("Finished updating hashes in db.")
 
+class client_interface:
+    class authentication:
+        def gen_token(credmancsv, username, hashedpassword):
+            rows = []
+            token = secrets.token_hex(16)
+            with open(credmancsv, newline='', mode='r'/) as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if row[0] == username and row[1] == hashedpassword:
+                        row[2] = token
+                    rows.append(row)
+            with open(credmancsv, mode='w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerows(rows)
+            return token
+
+        def validate_token(credmancsv, inputtoken):
+            with open(credmancsv, newline='') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if len(row) > 2 and row[2] == inputtoken:
+                        return True
+            return False
+
+        def create_account(credmancsv, username, password):
+            hashedpassword = hashlib.sha256(password.encode()).hexdigest()
+            with open(credmancsv, mode='a', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow([username, hashedpassword, ''])
+            return True
+
+        def remove_account(credmancsv, username):
+            rows = []
+            removed = False
+            with open(credmancsv, newline='') as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    if row[0] != username:
+                        rows.append(row)
+                    else:
+                        removed = True
+            with open(credmancsv, mode='w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerows(rows)
+            return removed
+
 class interface:
     def confirmation_dialogue(question, default=True):
         if default == True:
@@ -440,6 +490,7 @@ class interface:
 
             case "reset":
                 pass
+                
             case "syncall":
                 askpopulatedb = interface.confirmation_dialogue("Populate DB from root path in config?", default=True)
                 if askpopulatedb:
