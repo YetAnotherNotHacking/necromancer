@@ -26,6 +26,7 @@ try:
     import os
     import json
     import concurrent.futures
+    import io
     from pathlib import Path
 except Exception as e:
     print(f"Dependancies are not met. Install them.\nSpecfic error:\n{e}")
@@ -144,7 +145,17 @@ class storage_manager:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             conn = sqlite3.connect(path)
             conn.execute('''
-            CREATE TABLE IF NOT EXISTS files (
+            CREATE TA            CREATE TABLE IF NOT EXISTS files (
+                id INTEGER PRIMARY KEY,
+                path TEXT NOT NULL,
+                hash TEXT,
+                size INTEGER,
+                mtime INTEGER,
+                version INTEGER DEFAULT 1,
+                deleted INTEGER DEFAULT 0,
+                last_synced INTEGER,
+                world_id INTEGER
+            )BLE IF NOT EXISTS files (
                 id INTEGER PRIMARY KEY,
                 path TEXT NOT NULL,
                 hash TEXT,
@@ -394,6 +405,7 @@ class storage_manager:
 class client_interface:
     class authentication:
         def gen_token(credmancsv, username, hashedpassword):
+            log.info(f"Generating token for {username}")
             rows = []
             token = secrets.token_hex(16)
             with open(credmancsv, newline='', mode='r'/) as f:
@@ -416,6 +428,7 @@ class client_interface:
             return False
 
         def create_account(credmancsv, username, password):
+            log.info(f"Creating account for {username}")
             hashedpassword = hashlib.sha256(password.encode()).hexdigest()
             with open(credmancsv, mode='a', newline='') as f:
                 writer = csv.writer(f)
@@ -423,6 +436,7 @@ class client_interface:
             return True
 
         def remove_account(credmancsv, username):
+            log.info(f"Deleting account for {username}")
             rows = []
             removed = False
             with open(credmancsv, newline='') as f:
@@ -438,6 +452,7 @@ class client_interface:
             return removed
 
         def invalidate_token(credmancsv, inputtoken):
+            log.info(f"Invalidated a token starting with {inputtoken[:8]}...")
             rows = []
             invalitdated = True
             with open(credmancsv, newline='') as f:
@@ -498,6 +513,38 @@ def login():
         return jsonify({'error': 'invalid token'}), 401
     return jsonify({'status': 'logged out'})
 
+@app.route('/sync/manifest', methods=['GET'])
+def sync_manifest():
+    token = request.headers.get('Authorization')
+    if not token:
+        return jsonify({'error': 'missing auth token'}), 400
+    if not client_interface.authentication.validate_token(credential_location, token):
+        return jsonify({'error': 'invalid token was provided'}), 401
+    rows = storage_manager.crud_operation.read.read_ledger_full()
+    manifest = []
+    for row in rows:
+        manifest.append({
+            'id': row[0],
+            'path': row[1],
+            'hash': row[2],
+            'size': row[3],
+            'mtime': row[4]
+        })
+    return jsonify({'manifest': manifest})
+
+@app.route('/sync/file', metods=['GET'])
+def sync_file():
+    token = requests.headers.get('Authorization')
+    path = requests.args.get('path')
+    if not token or path:
+        return jsonify({"error":"token and path are required variables"})
+    if not client_interface.authentication.validate_token(credential_location, token):
+        return jsonify({"error": "invalid authentication passed."})
+    data = client_interface.system_interaction.get_file(path)
+    if data is None:
+        return jsonify({'error': 'file not found or access denied'}), 404
+    return send_file(io.BytesIO(data), download_name=os.path.basename(path), as_attachment=True)
+
 class interface:
     def confirmation_dialogue(question, default=True):
         if default == True:
@@ -539,8 +586,10 @@ class interface:
             log.error(f"Mode \'{mode}\' is not supported, supported options are {modes}")
 
         match mode:
+            # run the api
             case "run":
                 pass
+            # set up the app
             case "init":
                 storage_manager.init_database.init_filetrack_ledger()
                 storage_manager.init_database.init_world_database()
@@ -572,6 +621,7 @@ class interface:
                     else:
                         log.info("You probably want to populate the db at some point.")
 
+            # reset configuration and tracking
             case "reset":
                 pass
 
