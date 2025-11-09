@@ -453,8 +453,12 @@ class client_interface:
             return invalidated
     class system_interaction:
         def get_full_ledger():
-            # implemented elsewhere
-            pass
+            log.info("Reading full ledger from disk, as it was requested remotely.")
+            return storage_manager.crud_operation.read.read_ledger_full(ledgerdblocation)
+        
+        def get_file(path):
+            log.debug(f"Fetching file {path} for a remote server.")
+            return storage_manager.crud_operation.read.safe_read_file_from_disk(path)
 
 
 # ---------- API ----------
@@ -478,6 +482,21 @@ def login():
         return jsonify({'error': 'invalid credentials'}), 401
     return jsonify({'token': token})
 
+@app.route('/auth/logout', methods=['POST'])
+    try:
+        data = request.get_json()
+        token = data.get("token")
+    except:
+        return jsonify({'error': 'must be in json format'})
+    if not token:
+        return jsonify({'error': 'token is missing'}), 400
+    if validate_token(token):
+        success = client_interface.authentication.invalidate_token('/path/to/credman.csv', token)
+        if not succes:
+            return jsonify({'error': 'invalid token'}), 401
+    else:
+        return jsonify({'error': 'invalid token'}), 401
+    return jsonify({'status': 'logged out'})
 
 class interface:
     def confirmation_dialogue(question, default=True):
