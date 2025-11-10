@@ -30,7 +30,6 @@ try:
     from pathlib import Path
 except Exception as e:
     print(f"Dependancies are not met. Install them.\nSpecfic error:\n{e}")
-    exit()
 
 cfgdirs = PlatformDirs(systemname, company)
 config_path = cfgdirs.user_config_dir
