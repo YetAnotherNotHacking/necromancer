@@ -238,7 +238,7 @@ class storage_manager:
             # function to read files (e.g. server files) from the disk with sanitization
             def safe_read_file_from_disk(serverroot, file_path):
                 serverroot = os.path.abspath(serveroot)
-                target = os.path.abspath(ps.path.join(serverroot, file_path))
+                target = os.path.abspath(os.path.join(serverroot, file_path))
                 if not target.startswith(serveroot):
                     return None
                 if not os.path.isfile(file_path):
