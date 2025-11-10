@@ -462,7 +462,7 @@ class client_interface:
         
         def get_file(path):
             log.debug(f"Fetching file {path} for a remote server.")
-            return storage_manager.crud_operation.read.safe_read_file_from_disk(path)
+            return storage_manager.crud_operation.read.safe_read_file_from_disk(serverroot, path)
 
 
 # ---------- API ----------
