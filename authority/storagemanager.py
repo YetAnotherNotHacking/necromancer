@@ -524,10 +524,10 @@ def sync_manifest():
 
 @app.route('/sync/file', methods=['GET'])
 def sync_file():
-    token = requests.headers.get('Authorization')
-    path = requests.args.get('path')
-    if not token or path:
-        return jsonify({"error":"token and path are required variables"})
+    token = request.headers.get('Authorization')
+    path = request.args.get('path')
+    if not token or not path:
+        return jsonify({"error": "token and path are required variables"}), 400
     if not client_interface.authentication.validate_token(credential_location, token):
         return jsonify({"error": "invalid authentication passed."})
     data = client_interface.system_interaction.get_file(path)
