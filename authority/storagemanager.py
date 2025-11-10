@@ -498,6 +498,7 @@ def login():
     return jsonify({'token': token})
 
 @app.route('/auth/logout', methods=['POST'])
+def auth_logout():
     try:
         data = request.get_json()
         token = data.get("token")
