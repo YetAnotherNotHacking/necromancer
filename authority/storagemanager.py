@@ -22,7 +22,7 @@ try:
     import hashlib
     import sqlite3
     import argparse
-    import tempdir
+    import tempfile
     import os
     import json
     import concurrent.futures
@@ -145,16 +145,6 @@ class storage_manager:
             conn = sqlite3.connect(path)
             conn.execute('''
             CREATE TABLE IF NOT EXISTS files (
-                id INTEGER PRIMARY KEY,
-                path TEXT NOT NULL,
-                hash TEXT,
-                size INTEGER,
-                mtime INTEGER,
-                version INTEGER DEFAULT 1,
-                deleted INTEGER DEFAULT 0,
-                last_synced INTEGER,
-                world_id INTEGER
-            )BLE IF NOT EXISTS files (
                 id INTEGER PRIMARY KEY,
                 path TEXT NOT NULL,
                 hash TEXT,
