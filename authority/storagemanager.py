@@ -495,8 +495,8 @@ def auth_logout():
         return jsonify({'error': 'must be in json format'})
     if not token:
         return jsonify({'error': 'token is missing'}), 400
-    if validate_token(token):
-        success = client_interface.authentication.invalidate_token('/path/to/credman.csv', token)
+    if client_interface.authentication.validate_token(credential_location, token):
+        success = client_interface.authentication.invalidate_token(credential_location, token)
         if not succes:
             return jsonify({'error': 'invalid token'}), 401
     else:
@@ -510,7 +510,7 @@ def sync_manifest():
         return jsonify({'error': 'missing auth token'}), 400
     if not client_interface.authentication.validate_token(credential_location, token):
         return jsonify({'error': 'invalid token was provided'}), 401
-    rows = storage_manager.crud_operation.read.read_ledger_full()
+    rows = storage_manager.crud_operation.read.read_ledger_full(ledgerdblocation)
     manifest = []
     for row in rows:
         manifest.append({
