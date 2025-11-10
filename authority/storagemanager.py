@@ -62,7 +62,7 @@ class logfw:
         def warn(self, msg):
             self._log('WARN', msg)
         def error(self, msg):
-            self._log('ERORR', msg)
+            self._log('ERROR', msg)
         def success(self, msg):
             self._log('SUCCESS', msg)
         def debug(self, msg):
