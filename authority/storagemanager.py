@@ -443,7 +443,7 @@ class client_interface:
         def invalidate_token(credmancsv, inputtoken):
             log.info(f"Invalidated a token starting with {inputtoken[:8]}...")
             rows = []
-            invalitdated = True
+            invalidated = True
             with open(credmancsv, newline='') as f:
                 reader = csv.reader(f)
                 for row in reader:
