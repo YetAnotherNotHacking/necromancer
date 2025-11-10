@@ -244,7 +244,7 @@ class storage_manager:
                 conn = sqlite3.connect(path)
                 rows = conn.execute('SELECT * FROM files').fetchall()
                 conn.close()
-                return rows   rows = conn.execute
+                return rows
 
             # function to read files (e.g. server files) from the disk with sanitization
             def safe_read_file_from_disk(serverroot, file_path):
