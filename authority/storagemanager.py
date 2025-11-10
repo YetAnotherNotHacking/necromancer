@@ -215,7 +215,7 @@ class storage_manager:
                 conn.execute('INSERT INTO worlds (name, root_path, last_scan) VALUES (?, ?, ?)', (name, root_path, last_scan))
                 conn.commit()
                 conn.close()
-                log.success(f"Added world {world} at {root_path} to the ledger.")
+                log.success(f"Added world {name} at {root_path} to the ledger.")
 
 
         class read:
