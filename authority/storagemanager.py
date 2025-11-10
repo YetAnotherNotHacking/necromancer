@@ -408,7 +408,7 @@ class client_interface:
             log.info(f"Generating token for {username}")
             rows = []
             token = secrets.token_hex(16)
-            with open(credmancsv, newline='', mode='r'/) as f:
+            with open(credmancsv, newline='', mode='r') as f:
                 reader = csv.reader(f)
                 for row in reader:
                     if row[0] == username and row[1] == hashedpassword:
