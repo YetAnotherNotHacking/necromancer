@@ -481,7 +481,7 @@ def login():
     if not username or not password:
         return jsonify({'error': 'missing credentials'})
     hashedpassword = hashlib.sha256(password.encode()).hexdigest()
-    client_interface.authentication.gen_token(credential_location, username, hashedpassword)
+    token = client_interface.authentication.gen_token(credential_location, username, hashedpassword)
     if not token:
         return jsonify({'error': 'invalid credentials'}), 401
     return jsonify({'token': token})
