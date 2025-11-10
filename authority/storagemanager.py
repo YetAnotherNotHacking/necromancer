@@ -86,7 +86,7 @@ def write_config(configpath, host, port, serverroot, ledgerdblocation, worlddblo
     }
     configpath = Path(configpath)
     configpath.parent.mkdir(parents=True, exist_ok=True)
-    if configpath == "" or None:
+    if configpath is None:
         log.error("Config path is null when attempting to write config.")
         exit()
     with configpath.open("w") as f:
