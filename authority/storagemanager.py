@@ -1,7 +1,7 @@
 # Necromancer utility
 # Sync minecraft servers over the internet to prevent outages
 
-version = "0.1.0"
+version = "0.1.1"
 company = "Silverflag"
 systemname = "Necromancer"
 debug = False
