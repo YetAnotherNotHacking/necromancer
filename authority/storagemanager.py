@@ -144,7 +144,7 @@ class storage_manager:
             os.makedirs(os.path.dirname(path), exist_ok=True)
             conn = sqlite3.connect(path)
             conn.execute('''
-            CREATE TA            CREATE TABLE IF NOT EXISTS files (
+            CREATE TABLE IF NOT EXISTS files (
                 id INTEGER PRIMARY KEY,
                 path TEXT NOT NULL,
                 hash TEXT,
@@ -532,7 +532,7 @@ def sync_manifest():
         })
     return jsonify({'manifest': manifest})
 
-@app.route('/sync/file', metods=['GET'])
+@app.route('/sync/file', methods=['GET'])
 def sync_file():
     token = requests.headers.get('Authorization')
     path = requests.args.get('path')
