@@ -759,6 +759,7 @@ class interface:
                 log.info("Credential info init")
                 if not os.path.exists(credential_location):
                     log.info("Creds file doesn't exist, will make a new csv with no entries.")
+                    os.makedirs(os.path.dirname(credential_location), exist_ok=True)
                     with open(credential_location, "w", newline='') as f:
                         csv.writer(f).writerow(["username", "hashedpassword", "token"])
                 else:
@@ -783,7 +784,10 @@ class interface:
                     else:
                         log.info("Skipping config regeneration.")
                 if os.path.exists(config_location):
-                    askpopulatedb = interface.confirmation_dialogue("Populate DB from root path in config?", default=True)
+                    try: # just assume they want to populate if they arent in a env to respond e.g. nohup
+                        askpopulatedb = interface.confirmation_dialogue("Populate DB from root path in config?", default=True)
+                    except:
+                        askpopulatedb = True
                     if askpopulatedb:
                         host, port, serverroot, ledgerdblocation, worlddblocation, scaninterval, debugmode = storage_manager.config_manager.read_config(config_location)
                         populationthreads = 12
