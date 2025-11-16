@@ -26,6 +26,7 @@ try:
     import os
     import json
     import concurrent.futures
+    import threading
     import io
     from pathlib import Path
 except Exception as e:
@@ -216,6 +217,16 @@ class storage_manager:
                 conn.commit()
                 conn.close()
                 log.success(f"Added world {name} at {root_path} to the ledger.")
+        
+            def insert_row(db, path, hashval, size, mtime):
+                conn = sqlite3.connect(db)
+                cur = conn.cursor()
+                cur.execute(
+                    "INSERT INTO files (path, hash, size, mtime) VALUES (?, ?, ?, ?)",
+                    (path, hashval, size, mtime)
+                )
+                conn.commit()
+                conn.close()
 
 
         class read:
@@ -253,6 +264,15 @@ class storage_manager:
                 rows = conn.execute('SELECT * FROM worlds LIMIT ? OFFSET ?', (limit, offset)).fetchall()
                 conn.close()
                 return rows
+
+            def read_single_by_path(db, path):
+                conn = sqlite3.connect(db)
+                cur = conn.cursor()
+                cur.execute("SELECT id, path, hash, size, mtime, version, deleted, last_synced, world_id FROM files WHERE path = ?", (path,))
+                row = cur.fetchone()
+                conn.close()
+                return row
+
 
         class update:
             # function to modify file entires in the db:
@@ -300,6 +320,16 @@ class storage_manager:
                 conn.commit()
                 conn.close()
                 log.success(f"World {world_id} has been updated.")
+            
+            def update_row(db, path, hashval, size, mtime):
+                conn = sqlite3.connect(db)
+                cur = conn.cursor()
+                cur.execute(
+                    "UPDATE files SET hash = ?, size = ?, mtime = ?, version = version + 1 WHERE path = ?",
+                    (hashval, size, mtime, path)
+                )
+                conn.commit()
+                conn.close()
 
         class delete:
             def remove_ledger_record(path, file_id):
@@ -468,6 +498,8 @@ class client_interface:
 # ---------- API ----------
 app = Flask(__name__) # init app
 
+# /
+
 # /auth/login
 # POST endpoint, post credentials and return a new token to interact with the server
 @app.route('/auth/login', methods=['POST'])
@@ -569,18 +601,140 @@ class interface:
         )
 
     def ifbackend(mode):
-        modes = ["run", "init", "reset", "syncall", "info"]
+        modes = ["run", "init", "reset", "syncall", "info", "useredit"]
         log.debug(f"Interface backend running in mode {mode}")
         
         if mode not in modes:
             log.error(f"Mode \'{mode}\' is not supported, supported options are {modes}")
 
         match mode:
+            case "useredit":
+                log.info("Ok, what action would you like to perform?")
+                dialogue_string = """
+                Options:
+
+                1 - add user
+
+                2 - remove user
+
+                Option
+                """
+                useredit_action = input(dialogue_string).strip()
+                valid_options = ["1", "2"]
+                if useredit_action not in valid_options:
+                    log.error("Invalid option. Bye.")
+                    exit()
+                else:
+                    if not os.path.exists(credential_location):
+                        with open(credential_location, "w", newline='') as f:
+                            csv.writer(f).writerow(["username", "hashedpassword", "token"])
+                if useredit_action == "1":
+                    username = input("Username: ").strip()
+                    if not username:
+                        log.error("No username provided.")
+                        exit()
+                    password = input("Password: ")
+                    if not password:
+                        log.error("No password was provided")
+                        exit()
+                    with open(credential_location, newline='') as f:
+                        reader = csv.reader(f)
+                        for row in reader:
+                            if row and row[0] == username:
+                                log.error("User already exists.")
+                                exit()
+                    if client_interface.authentication.create_account(credential_location, username, password):
+                        log.success(f"Created account {username}")
+                    else:
+                        log.error("Unknown error when creating account. Maybe clear configs, init, and try again. Nonfatal, however you probably want to stop the program.")
+                    
+                elif useredit_action == "2":
+                    accounts = []
+                    log.debug(f"Loaded {len(accounts)} accounts for useredit operation")
+                    with open(credential_location, newline='') as f:
+                        reader = csv.reader(f)
+                        for row in reader:
+                            if not row:
+                                continue
+                            if row[0].lower() == "username" and row[1].lower() in ("hashedpassword","password"):
+                                continue
+                            accounts.append(row[0])
+                    if not accounts:
+                        log.warn("No accounts available to remove.")
+                        exit()
+                    for i, a in enumerate(accounts, start = 1):
+                        log.info(f"{i} - {a}")
+                    choice = input("Enter username or number to remove: ").strip()
+                    target = None
+                    if choice.isdigit():
+                        idx = int(choice) - 1
+                        if 0 <= idx < len(accounts):
+                            target = accounts[idx]
+                        else:
+                            log.error("Invalid selection.")
+                            exit()
+                    else:
+                        if choice in accounts:
+                            target = choice
+                        else:
+                            log.error("Username not found.")
+                            exit()
+                    confirm = interface.confirmation_dialogue(f"Confirm delete user {target}?", default=False)
+                    if not confirm:
+                        log.error("User aborted.")
+                        exit()
+                    removed = client_interface.authentication.remove_account(credential_location, target)
+                    if removed:
+                        log.success(f"Removed account {target}")
+                    else:
+                        log.error("Unkown error removing account.")
+                else:
+                    log.error("Invalid option! Bye.")
+                    exit()
+
             # run the api
             case "run":
-                pass
+                host, port, serverroot, ledgerdblocation, worlddblocation, scaninterval, debug = read_config(config_location)
+
+                def background_scan():
+                    while True:
+                        log.info("Starting background file scan...")
+                        for root, dirs, files in os.walk(serverroot):
+                            for f in files:
+                                p = os.path.join(root, f)
+                                try:
+                                    h = storage_manager.verify_file_hash(p)
+                                except:
+                                    log.debug(f"Failed to hash {p}")
+                                    continue
+                                s = os.path.getsize(p)
+                                m = int(os.path.getmtime(p))
+                                row = storage_manager.crud_operation.read.read_single_by_path(ledgerdblocation, p)
+                                if row is None:
+                                    storage_manager.crud_operation.create.insert_row(ledgerdblocation, p, h, s, m)
+                                else:
+                                    if row[2] != h or row[3] != s or row[4] != m:
+                                        storage_manager.crud_operation.update.update_row(ledgerdblocation, p, h, s, m)
+                                        log.debug(f"Updated file: {p}")
+                        log.info(f"Scan complete. Next scan in {scaninterval} seconds.")
+                        time.sleep(scaninterval)
+
+                # Start the background scanning thread
+                scan_thread = threading.Thread(target=background_scan, daemon=True)
+                scan_thread.start()
+                log.info("Background file scanning started")
+
+                log.info(f"Starting API server on {host}:{port}")
+                app.run(host=host, port=port, debug=debug)
             # set up the app
             case "init":
+                log.info("Credential info init")
+                if not os.path.exists(credential_location):
+                    log.info("Creds file doesn't exist, will make a new csv with no entries.")
+                    with open(credential_location, "w", newline='') as f:
+                        csv.writer(f).writerow(["username", "hashedpassword", "token"])
+                else:
+                    log.info("Creds file already exists")
                 storage_manager.init_database.init_filetrack_ledger()
                 storage_manager.init_database.init_world_database()
                 log.info(f"System config path: {config_location}")
@@ -631,7 +785,7 @@ class interface:
     def local_argument_parser():
         parser = argparse.ArgumentParser(description=systemname)
 
-        parser.add_argument("runmode", help="Mode to run progam in, options: run, init, reset, syncall, info")
+        parser.add_argument("runmode", help="Mode to run progam in, options: run, init, reset, syncall, info, useredit")
 
         inputargs = parser.parse_args()
 
