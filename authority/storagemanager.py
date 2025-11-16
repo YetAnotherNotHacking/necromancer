@@ -601,10 +601,17 @@ class interface:
         else:
             defanswer = "[y/N]"
 
-        if not sys.stdin.isatty():
+        try:
+            if not sys.stdin or not sys.stdin.isatty():
+                return default
+        except:
             return default
 
-        userinput = input(f"{question} - {defanswer}")
+        try:
+            userinput = input(f"{question} - {defanswer}")
+        except (OSError, EOFError):
+            return default
+
         if userinput.lower() == "y" or (userinput == "" and default):
             return True
         return False
