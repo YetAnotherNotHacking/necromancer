@@ -5,8 +5,33 @@ version = "0.1.1"
 company = "Silverflag"
 systemname = "Necromancer"
 debug = False
+logo = [
+":::.    :::.",
+"`;;;;,  `;;;",
+"  [[[[[. '[[,cc[[[cc. ,cc[[[cc.=,,[[== ,ccc,  [ccc, ,cccc,  ,ccc,   [ccccc,  ,cc[[[cc. ,cc[[[cc.=,,[[==",
+"  $$$ \"Y$c$$$$$___--' $$$      `$$$\"``$$$\"c$$$$$$$$$$$\"$$$ $$$cc$$$ $$$$\"$$$ $$$       $$$___--'`$$$\"``",
+"  888    Y8888b    ,o,88b    ,o,888   888   88888 Y88\" 888o888   888888  Y88o88b    ,o,88b    ,o,888",
+"  MMM     YM \"YUMMMMP\" \"YUMMMMP\"\"MM,   \"YUMMP MMM  M'  \"MMM \"YUM\" MPMMM  \"MMM \"YUMMMMP\" \"YUMMMMP\"\"MM,",
+]
 
 print(f"{company} {systemname} v{version}")
+
+# do color gradients
+start = (255, 0, 100)
+end = (0, 200, 255)
+steps = len(logo)
+
+# find mix values
+def mix(a, b, t):
+    return int(a + (b - a) * t)
+
+# print and mix
+for i, line in enumerate(logo):
+    t = i / max(steps - 1, 1)
+    r = mix(start[0], end[0], t)
+    g = mix(start[1], end[1], t)
+    b = mix(start[2], end[2], t)
+    print(f"\033[38;2;{r};{g};{b}m{line}\033[0m")
 # Manages the server's hash manifest database, a ledger of the files on the server with xxhash values to
 # compare values with the client to indicate updated files.
 
@@ -217,7 +242,7 @@ class storage_manager:
                 conn.commit()
                 conn.close()
                 log.success(f"Added world {name} at {root_path} to the ledger.")
-        
+
             def insert_row(db, path, hashval, size, mtime):
                 conn = sqlite3.connect(db)
                 cur = conn.cursor()
@@ -320,7 +345,7 @@ class storage_manager:
                 conn.commit()
                 conn.close()
                 log.success(f"World {world_id} has been updated.")
-            
+
             def update_row(db, path, hashval, size, mtime):
                 conn = sqlite3.connect(db)
                 cur = conn.cursor()
@@ -346,7 +371,7 @@ class storage_manager:
                 conn.commit()
                 conn.close()
                 log.success(f"Deleted world {world_id}")
-    
+
     class file_status_mng:
         # checks if db is empty, and fills db with hashes of files for first time init.
         def populate_db_with_file_hashes(root_path, threads, ledgerdblocation):
@@ -407,13 +432,13 @@ class storage_manager:
                     )
                     log.debug(f"Added new file {file_path}")
                 conn.close()
-            
+
             log.info(f"Updating hashes in db for the server")
             files = []
             for root, _, filenames in os.walk(root_path):
                 for name in filenames:
                     files.append(os.path.join(root, name))
-            
+
             log.info(f"Discovered {len(files)} files to check")
 
             with concurrent.futures.ThreadPoolExecutor(max_workers=threads) as executor:
@@ -489,7 +514,7 @@ class client_interface:
         def get_full_ledger():
             log.info("Reading full ledger from disk, as it was requested remotely.")
             return storage_manager.crud_operation.read.read_ledger_full(ledgerdblocation)
-        
+
         def get_file(path):
             log.debug(f"Fetching file {path} for a remote server.")
             return storage_manager.crud_operation.read.safe_read_file_from_disk(serverroot, path)
@@ -607,7 +632,7 @@ class interface:
     def ifbackend(mode):
         modes = ["run", "init", "reset", "syncall", "info", "useredit"]
         log.debug(f"Interface backend running in mode {mode}")
-        
+
         if mode not in modes:
             log.error(f"Mode \'{mode}\' is not supported, supported options are {modes}")
 
@@ -651,7 +676,7 @@ class interface:
                         log.success(f"Created account {username}")
                     else:
                         log.error("Unknown error when creating account. Maybe clear configs, init, and try again. Nonfatal, however you probably want to stop the program.")
-                    
+
                 elif useredit_action == "2":
                     accounts = []
                     log.debug(f"Loaded {len(accounts)} accounts for useredit operation")
@@ -729,7 +754,7 @@ class interface:
                 log.info("Background file scanning started")
 
                 log.info(f"Starting API server on {host}:{port}")
-                app.run(host=host, port=port, debug=debug)
+                app.run(host=host, port=port, debug=False)
             # set up the app
             case "init":
                 log.info("Credential info init")
