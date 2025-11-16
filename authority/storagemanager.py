@@ -35,27 +35,25 @@ for i, line in enumerate(logo):
 # Manages the server's hash manifest database, a ledger of the files on the server with xxhash values to
 # compare values with the client to indicate updated files.
 
-try:
-    from colorama import Fore, Style, init
-    from datetime import datetime
-    from platformdirs import PlatformDirs
-    from flask import Flask, request, jsonify, send_file
-    from functools import wraps
-    import secrets
-    import time
-    import csv
-    import hashlib
-    import sqlite3
-    import argparse
-    import tempfile
-    import os
-    import json
-    import concurrent.futures
-    import threading
-    import io
-    from pathlib import Path
-except Exception as e:
-    print(f"Dependancies are not met. Install them.\nSpecfic error:\n{e}")
+from colorama import Fore, Style, init
+from datetime import datetime
+from platformdirs import PlatformDirs
+from flask import Flask, request, jsonify, send_file
+from functools import wraps
+import secrets
+import time
+import csv
+import hashlib
+import sqlite3
+import argparse
+import tempfile
+import os
+import json
+import concurrent.futures
+import threading
+import io
+from pathlib import Path
+
 
 cfgdirs = PlatformDirs(systemname, company)
 config_path = cfgdirs.user_config_dir
