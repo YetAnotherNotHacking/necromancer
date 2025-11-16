@@ -499,6 +499,10 @@ class client_interface:
 app = Flask(__name__) # init app
 
 # /
+# root path for the server
+@app.route("/", methods=["GET"])
+def rootresponse():
+    return jsonify({'version': version, "health": "healthy"})
 
 # /auth/login
 # POST endpoint, post credentials and return a new token to interact with the server
