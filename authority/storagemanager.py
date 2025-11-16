@@ -596,18 +596,19 @@ def sync_file():
 
 class interface:
     def confirmation_dialogue(question, default=True):
-        if default == True:
+        if default:
             defanswer = "[Y/n]"
         else:
             defanswer = "[y/N]"
-        userinput = input(f"{question} - {defanswer}")
-        if (userinput.lower() == "y") or (userinput == "" and default == True):
-            # log.debug(f"Answer to \'{question}\' was True.")
-            return True
-        else:
-            # log.debug(f"Answer to \'{question}\' was False.")
-            return False
 
+        if not sys.stdin.isatty():
+            return default
+
+        userinput = input(f"{question} - {defanswer}")
+        if userinput.lower() == "y" or (userinput == "" and default):
+            return True
+        return False
+    
     def init_config_request():
         configconfigpath = config_location
         confighost = input("Host (ip): ")
