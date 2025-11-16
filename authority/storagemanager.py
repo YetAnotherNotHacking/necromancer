@@ -652,6 +652,7 @@ class interface:
                     log.error("Invalid option. Bye.")
                     exit()
                 else:
+                    os.makedirs(os.path.dirname(credential_location), exist_ok=True)
                     if not os.path.exists(credential_location):
                         with open(credential_location, "w", newline='') as f:
                             csv.writer(f).writerow(["username", "hashedpassword", "token"])
