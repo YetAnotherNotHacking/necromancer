@@ -271,9 +271,9 @@ class storage_manager:
 
             # function to read files (e.g. server files) from the disk with sanitization
             def safe_read_file_from_disk(serverroot, file_path):
-                serverroot = os.path.abspath(serveroot)
+                _, _, serverroot, ledgerdblocation, _, _, _ = read_config(config_location)
                 target = os.path.abspath(os.path.join(serverroot, file_path))
-                if not target.startswith(serveroot):
+                if not target.startswith(serverroot):
                     return None
                 if not os.path.isfile(file_path):
                     return None
@@ -515,6 +515,7 @@ class client_interface:
 
         def get_file(path):
             log.debug(f"Fetching file {path} for a remote server.")
+            _, _, serverroot, _, _, _, _ = read_config(config_location)
             return storage_manager.crud_operation.read.safe_read_file_from_disk(serverroot, path)
 
 
@@ -565,6 +566,7 @@ def auth_logout():
 @app.route('/sync/manifest', methods=['GET'])
 def sync_manifest():
     token = request.headers.get('Authorization')
+    _, _, _, ledgerdblocation, _, _, _ = read_config(config_location)
     if not token:
         return jsonify({'error': 'missing auth token'}), 400
     if not client_interface.authentication.validate_token(credential_location, token):
@@ -585,6 +587,8 @@ def sync_manifest():
 def sync_file():
     token = request.headers.get('Authorization')
     path = request.args.get('path')
+    _, _, serverroot, ledgerdblocation, _, _, _ = read_config(config_location)
+    
     if not token or not path:
         return jsonify({"error": "token and path are required variables"}), 400
     if not client_interface.authentication.validate_token(credential_location, token):
@@ -761,6 +765,13 @@ class interface:
                 log.info("Background file scanning started")
 
                 log.info(f"Starting API server on {host}:{port}")
+                
+                try:
+                    host, port, serverroot, ledgerdblocation, worlddblocation, scaninterval, debug = read_config(config_location)
+                except Exception as e:
+                    log.error(f"Failed to load config: {e}")
+                    log.error("Please run 'init' mode first to create a configuration.")
+                    exit(1)
                 app.run(host=host, port=port, debug=False)
             # set up the app
             case "init":
