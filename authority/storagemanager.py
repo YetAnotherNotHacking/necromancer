@@ -272,10 +272,17 @@ class storage_manager:
             # function to read files (e.g. server files) from the disk with sanitization
             def safe_read_file_from_disk(serverroot, file_path):
                 _, _, serverroot, ledgerdblocation, _, _, _ = read_config(config_location)
+                # Resolve both paths to handle symlinks properly
+                serverroot_resolved = os.path.realpath(serverroot)
                 target = os.path.abspath(os.path.join(serverroot, file_path))
-                if not target.startswith(serverroot):
+                target_resolved = os.path.realpath(target)
+                
+                # Check if the resolved target is within the resolved serverroot
+                if not target_resolved.startswith(serverroot_resolved):
+                    log.warn(f"Access denied: {file_path} is outside serverroot")
                     return None
-                if not os.path.isfile(file_path):
+                if not os.path.isfile(target):
+                    log.warn(f"File not found: {target}")
                     return None
                 with open(target, 'rb') as f:
                     return f.read()
@@ -396,7 +403,8 @@ class storage_manager:
                 log.info("Performed init. Please run syncall again.")
 
             files = []
-            for root, _, filenames in os.walk(root_path):
+            # CHANGED: Added followlinks=True to follow symlinks
+            for root, _, filenames in os.walk(root_path, followlinks=True):
                 for name in filenames:
                     files.append(os.path.join(root, name))
             log.info(f"Walked directories, discovered {len(files)} files")
@@ -433,7 +441,8 @@ class storage_manager:
 
             log.info(f"Updating hashes in db for the server")
             files = []
-            for root, _, filenames in os.walk(root_path):
+            # CHANGED: Added followlinks=True to follow symlinks
+            for root, _, filenames in os.walk(root_path, followlinks=True):
                 for name in filenames:
                     files.append(os.path.join(root, name))
 
@@ -557,7 +566,7 @@ def auth_logout():
         return jsonify({'error': 'token is missing'}), 400
     if client_interface.authentication.validate_token(credential_location, token):
         success = client_interface.authentication.invalidate_token(credential_location, token)
-        if not succes:
+        if not success:
             return jsonify({'error': 'invalid token'}), 401
     else:
         return jsonify({'error': 'invalid token'}), 401
@@ -739,7 +748,8 @@ class interface:
                 def background_scan():
                     while True:
                         log.info("Starting background file scan...")
-                        for root, dirs, files in os.walk(serverroot):
+                        # CHANGED: Added followlinks=True to follow symlinks
+                        for root, dirs, files in os.walk(serverroot, followlinks=True):
                             for f in files:
                                 p = os.path.join(root, f)
                                 try:
